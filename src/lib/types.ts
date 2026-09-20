@@ -68,6 +68,7 @@ export interface Movie {
   age_rating: string;
   release_date: string;
   status: MovieStatus;
+  poster_url: string | null;
   genre_names: string[];
   gradient: [string, string];
 }

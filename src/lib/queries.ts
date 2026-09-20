@@ -46,6 +46,7 @@ function mapMovie(row: {
   age_rating: string | null;
   release_date: string | null;
   status: Movie["status"];
+  poster_url?: string | null;
   movie_genres?: { genres: { name: string } | null }[];
 }): Movie {
   return {
@@ -57,6 +58,7 @@ function mapMovie(row: {
     age_rating: row.age_rating ?? "",
     release_date: row.release_date ?? "",
     status: row.status,
+    poster_url: row.poster_url ?? null,
     genre_names: (row.movie_genres ?? [])
       .map((mg) => mg.genres?.name)
       .filter((n): n is string => Boolean(n)),
