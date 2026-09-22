@@ -123,8 +123,12 @@ export default function GiftCardsPage() {
 
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-bg-elevated p-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Search className="h-4 w-4 text-accent" /> ตรวจสอบ / ใช้บัตร
+            <Search className="h-4 w-4 text-accent" /> ตรวจสอบยอดคงเหลือ
           </h2>
+          <p className="-mt-1 text-xs text-text-faint">
+            สำหรับเช็คยอด หรือหักยอดโดยไม่ผูกกับบิล — ถ้าจะใช้บัตรจ่ายค่าตั๋ว/ของทานเล่นจริง
+            ให้กรอกรหัสบัตรที่หน้าชำระเงิน (Ticketing/Concession) ตอนเช็คเอาท์แทน
+          </p>
           <form onSubmit={handleLookup} className="flex gap-2">
             <input
               value={lookupCode}
@@ -164,7 +168,7 @@ export default function GiftCardsPage() {
                   disabled={redeeming || found.status !== "active"}
                   className="shrink-0 rounded-lg bg-accent px-3 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  ใช้บัตร
+                  หักยอดด้วยตนเอง
                 </button>
               </div>
               {redeemMessage && <p className="text-xs text-text-muted">{redeemMessage}</p>}

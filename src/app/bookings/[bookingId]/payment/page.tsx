@@ -6,7 +6,7 @@ import { ChevronLeft, CreditCard, Minus, Plus, QrCode, Smartphone, Wallet } from
 import clsx from "clsx";
 import AuthGuard from "@/components/AuthGuard";
 import CountdownTimer from "@/components/CountdownTimer";
-import { fetchAddons, fetchShowtimeDetail } from "@/lib/queries";
+import { fetchAddons, fetchGiftCardByCode, fetchShowtimeDetail } from "@/lib/queries";
 import type { ShowtimeDetail } from "@/lib/queries";
 import {
   applyPromo,
@@ -14,11 +14,12 @@ import {
   effectiveStatus,
   fetchBooking,
   fetchBookingSeats,
+  redeemGiftCardForBooking,
 } from "@/lib/mutations";
 import { fetchSeatsForHall } from "@/lib/queries";
 import { formatCurrency, formatDate, formatTime } from "@/lib/format";
 import { useAuthStore } from "@/lib/store/authStore";
-import type { Addon, Booking, BookingSeat, Payment, Seat } from "@/lib/types";
+import type { Addon, Booking, BookingSeat, GiftCard, Payment, Seat } from "@/lib/types";
 
 const METHODS: { key: Payment["method"]; label: string; icon: React.ElementType }[] = [
   { key: "promptpay", label: "พร้อมเพย์ (PromptPay)", icon: QrCode },
@@ -41,6 +42,11 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
   const [method, setMethod] = useState<Payment["method"]>("promptpay");
   const [promoInput, setPromoInput] = useState("");
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
+  const [giftCardInput, setGiftCardInput] = useState("");
+  const [giftCardFound, setGiftCardFound] = useState<GiftCard | null | undefined>(undefined);
+  const [giftCardAmount, setGiftCardAmount] = useState("");
+  const [giftCardMessage, setGiftCardMessage] = useState<string | null>(null);
+  const [giftCardBusy, setGiftCardBusy] = useState(false);
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -194,6 +200,36 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
     }
   }
 
+  async function handleLookupGiftCard() {
+    if (!giftCardInput.trim() || !booking) return;
+    setGiftCardMessage(null);
+    const card = await fetchGiftCardByCode(giftCardInput);
+    setGiftCardFound(card);
+    setGiftCardAmount(card ? String(Math.min(card.balance, booking.total_amount)) : "");
+  }
+
+  async function handleRedeemGiftCard() {
+    if (!giftCardFound) return;
+    const amount = Number(giftCardAmount);
+    if (!amount || amount <= 0) return;
+    setGiftCardBusy(true);
+    setGiftCardMessage(null);
+    const result = await redeemGiftCardForBooking(bookingId, giftCardFound.code, amount);
+    setGiftCardBusy(false);
+    if (!result.ok) {
+      setGiftCardMessage(result.message ?? "ใช้บัตรไม่สำเร็จ");
+      return;
+    }
+    setGiftCardMessage(
+      `ใช้บัตรสำเร็จ -${formatCurrency(result.applied ?? amount)} (คงเหลือในบัตร ${formatCurrency(result.card_balance ?? 0)})`,
+    );
+    setGiftCardFound(null);
+    setGiftCardInput("");
+    setGiftCardAmount("");
+    const refreshed = await fetchBooking(bookingId);
+    setBooking(refreshed);
+  }
+
   function handleExpire() {
     fetchBooking(bookingId).then(setBooking);
   }
@@ -290,6 +326,60 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
           </div>
           {promoMessage && (
             <p className="mt-1.5 text-xs text-text-muted">{promoMessage}</p>
+          )}
+        </section>
+
+        <section>
+          <p className="mb-2 text-sm font-semibold">บัตรของขวัญ</p>
+          <div className="flex gap-2">
+            <input
+              value={giftCardInput}
+              onChange={(e) => {
+                setGiftCardInput(e.target.value);
+                setGiftCardFound(undefined);
+              }}
+              placeholder="รหัสบัตร เช่น GC1234ABCD"
+              className="flex-1 rounded-xl border border-border bg-bg-elevated px-3 py-2 text-sm uppercase outline-none placeholder:normal-case placeholder:text-text-faint focus:border-accent"
+            />
+            <button
+              onClick={handleLookupGiftCard}
+              className="shrink-0 rounded-xl border border-border-strong px-4 text-sm font-medium text-text-muted hover:text-text"
+            >
+              ตรวจสอบ
+            </button>
+          </div>
+
+          {giftCardFound === null && (
+            <p className="mt-1.5 text-xs text-text-faint">ไม่พบบัตรรหัสนี้</p>
+          )}
+
+          {giftCardFound && (
+            <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-bg-elevated px-3 py-2.5">
+              <div className="min-w-0 flex-1 text-xs">
+                <p className="font-mono font-semibold">{giftCardFound.code}</p>
+                <p className="text-text-faint">
+                  คงเหลือ <span className="text-gold">{formatCurrency(giftCardFound.balance)}</span>
+                </p>
+              </div>
+              <input
+                type="number"
+                min={1}
+                max={Math.min(giftCardFound.balance, booking.total_amount)}
+                value={giftCardAmount}
+                onChange={(e) => setGiftCardAmount(e.target.value)}
+                className="w-20 shrink-0 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent"
+              />
+              <button
+                onClick={handleRedeemGiftCard}
+                disabled={giftCardBusy || giftCardFound.status !== "active"}
+                className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                ใช้บัตร
+              </button>
+            </div>
+          )}
+          {giftCardMessage && (
+            <p className="mt-1.5 text-xs text-text-muted">{giftCardMessage}</p>
           )}
         </section>
 

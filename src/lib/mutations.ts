@@ -53,6 +53,24 @@ export async function applyPromo(
   return data as RpcResult;
 }
 
+/** Redeems part or all of a gift card's balance against a booking that's
+ * still pending_payment — the actual "use it at checkout" path (separate
+ * from the Gift Card page's standalone balance lookup/adjust). */
+export async function redeemGiftCardForBooking(
+  bookingId: string,
+  code: string,
+  amount: number,
+): Promise<RpcResult & { applied?: number; card_balance?: number }> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("redeem_gift_card_for_booking", {
+    p_booking_id: bookingId,
+    p_code: code,
+    p_amount: amount,
+  });
+  if (error) return { ok: false, message: error.message };
+  return data as RpcResult & { applied?: number; card_balance?: number };
+}
+
 export async function confirmPayment(
   bookingId: string,
   method: Payment["method"],
