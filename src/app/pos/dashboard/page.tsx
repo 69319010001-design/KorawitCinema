@@ -10,23 +10,24 @@ import {
 import type { DashboardBookingRow, ShowtimeOccupancy } from "@/lib/queries";
 import { formatCurrency, formatTime } from "@/lib/format";
 
-type Period = "today" | "7d" | "30d";
+type Period = "today" | "7d" | "30d" | "all";
 
-const PERIODS: { key: Period; label: string; days: number }[] = [
-  { key: "today", label: "วันนี้", days: 1 },
-  { key: "7d", label: "7 วันล่าสุด", days: 7 },
-  { key: "30d", label: "30 วันล่าสุด", days: 30 },
+const PERIODS: { key: Period; label: string }[] = [
+  { key: "today", label: "วันนี้" },
+  { key: "7d", label: "7 วันล่าสุด" },
+  { key: "30d", label: "30 วันล่าสุด" },
+  { key: "all", label: "ทั้งหมด" },
 ];
 
 function sinceForPeriod(period: Period): Date {
-  const days = PERIODS.find((p) => p.key === period)!.days;
+  if (period === "all") return new Date(0);
   if (period === "today") {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   }
   const d = new Date();
-  d.setDate(d.getDate() - days);
+  d.setDate(d.getDate() - (period === "7d" ? 7 : 30));
   return d;
 }
 
@@ -90,7 +91,7 @@ function RankedList({
 }
 
 export default function DashboardPage() {
-  const [period, setPeriod] = useState<Period>("today");
+  const [period, setPeriod] = useState<Period>("7d");
   const [bookings, setBookings] = useState<DashboardBookingRow[]>([]);
   const [occupancy, setOccupancy] = useState<ShowtimeOccupancy[]>([]);
   const [loading, setLoading] = useState(true);
