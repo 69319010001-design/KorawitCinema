@@ -2,7 +2,16 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, CreditCard, Minus, Plus, QrCode, Smartphone, Wallet } from "lucide-react";
+import {
+  Banknote,
+  ChevronLeft,
+  CreditCard,
+  Minus,
+  Plus,
+  QrCode,
+  Smartphone,
+  Wallet,
+} from "lucide-react";
 import clsx from "clsx";
 import AuthGuard from "@/components/AuthGuard";
 import CountdownTimer from "@/components/CountdownTimer";
@@ -22,6 +31,7 @@ import { useAuthStore } from "@/lib/store/authStore";
 import type { Addon, Booking, BookingSeat, GiftCard, Payment, Seat } from "@/lib/types";
 
 const METHODS: { key: Payment["method"]; label: string; icon: React.ElementType }[] = [
+  { key: "cash", label: "เงินสด", icon: Banknote },
   { key: "promptpay", label: "พร้อมเพย์ (PromptPay)", icon: QrCode },
   { key: "credit_card", label: "บัตรเครดิต/เดบิต", icon: CreditCard },
   { key: "true_money", label: "TrueMoney Wallet", icon: Wallet },
@@ -39,7 +49,8 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
   const [hallSeats, setHallSeats] = useState<Seat[]>([]);
   const [addons, setAddons] = useState<Addon[]>([]);
 
-  const [method, setMethod] = useState<Payment["method"]>("promptpay");
+  const [method, setMethod] = useState<Payment["method"]>("cash");
+  const [cashTendered, setCashTendered] = useState("");
   const [promoInput, setPromoInput] = useState("");
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [giftCardInput, setGiftCardInput] = useState("");
@@ -117,6 +128,10 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
     () => addons.reduce((sum, a) => sum + (addonQty[a.addon_id] ?? 0) * a.price, 0),
     [addons, addonQty],
   );
+
+  const finalTotal = (booking?.total_amount ?? 0) + addonTotal;
+  const cashChange = Number(cashTendered || 0) - finalTotal;
+  const cashInsufficient = method === "cash" && (!cashTendered || cashChange < 0);
 
   useEffect(() => {
     if (booking?.status === "confirmed") {
@@ -412,6 +427,34 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
               );
             })}
           </div>
+
+          {method === "cash" && (
+            <div className="mt-3 space-y-2 rounded-xl border border-border bg-bg-elevated p-3">
+              <label className="block">
+                <span className="mb-1 block text-xs text-text-muted">รับเงินมา (บาท)</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={cashTendered}
+                  onChange={(e) => setCashTendered(e.target.value)}
+                  placeholder={String(finalTotal)}
+                  className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                />
+              </label>
+              {cashTendered && (
+                <p
+                  className={clsx(
+                    "text-sm font-semibold",
+                    cashChange < 0 ? "text-accent" : "text-success",
+                  )}
+                >
+                  {cashChange < 0
+                    ? `ขาดอีก ${formatCurrency(Math.abs(cashChange))}`
+                    : `เงินทอน ${formatCurrency(cashChange)}`}
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="space-y-1.5 rounded-xl border border-border bg-bg-elevated p-4 text-sm">
@@ -422,7 +465,7 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
           {addonTotal > 0 && <Row label="ของทานเล่น" value={formatCurrency(addonTotal)} />}
           <div className="!mt-3 flex items-center justify-between border-t border-border pt-2 text-base font-bold">
             <span>ยอดรวม</span>
-            <span className="text-accent">{formatCurrency(booking.total_amount + addonTotal)}</span>
+            <span className="text-accent">{formatCurrency(finalTotal)}</span>
           </div>
         </section>
 
@@ -432,11 +475,11 @@ function PaymentContent({ bookingId }: { bookingId: string }) {
       <div className="sticky bottom-0 border-t border-border bg-bg-elevated">
         <div className="mx-auto w-full max-w-3xl px-4 py-3">
           <button
-            disabled={submitting}
+            disabled={submitting || cashInsufficient}
             onClick={handleConfirm}
             className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
           >
-            ยืนยันชำระเงิน {formatCurrency(booking.total_amount + addonTotal)}
+            ยืนยันชำระเงิน {formatCurrency(finalTotal)}
           </button>
         </div>
       </div>

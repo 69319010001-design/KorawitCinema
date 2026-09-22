@@ -1,5 +1,5 @@
 import { createClient } from "./supabase/client";
-import type { Booking, BookingSeat, GiftCard, Payment } from "./types";
+import type { Booking, BookingSeat, GiftCard, Payment, UserRole } from "./types";
 
 // ---------------------------------------------------------------------------
 // Writes to bookings/booking_seats/payments all go through the Postgres RPC
@@ -85,6 +85,18 @@ export async function confirmPayment(
     p_booking_id: bookingId,
     p_method: method,
     p_addons: addons,
+  });
+  if (error) return { ok: false, message: error.message };
+  return data as RpcResult;
+}
+
+/** Voids a confirmed booking: releases its seats, marks the payment
+ * refunded, and claws back the points it earned. Admin only. */
+export async function voidBooking(bookingId: string, reason?: string): Promise<RpcResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("void_booking", {
+    p_booking_id: bookingId,
+    p_reason: reason ?? null,
   });
   if (error) return { ok: false, message: error.message };
   return data as RpcResult;
@@ -249,4 +261,20 @@ export async function redeemGiftCard(input: {
   });
 
   return { ok: true, balance: newBalance };
+}
+
+// ---------------------------------------------------------------------------
+// Admin: user role management. RLS ("admin read all users" / "admin update
+// user roles" in supabase_migration_cashier_core.sql) restricts this to
+// accounts with role = admin — anyone else's request is just denied by RLS.
+// ---------------------------------------------------------------------------
+
+export async function updateUserRole(
+  userId: string,
+  role: UserRole,
+): Promise<{ ok: boolean; message?: string }> {
+  const supabase = createClient();
+  const { error } = await supabase.from("users").update({ role }).eq("user_id", userId);
+  if (error) return { ok: false, message: error.message };
+  return { ok: true };
 }

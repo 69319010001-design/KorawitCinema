@@ -129,7 +129,7 @@ export interface BookingSeat {
 export interface Payment {
   payment_id: string;
   booking_id: string;
-  method: "credit_card" | "promptpay" | "true_money" | "line_pay";
+  method: "cash" | "credit_card" | "promptpay" | "true_money" | "line_pay";
   amount: number;
   provider_ref: string;
   paid_at: string | null;

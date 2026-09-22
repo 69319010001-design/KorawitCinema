@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, MapPin, Plus, Search } from "lucide-react";
+import { CalendarDays, MapPin, Plus, Search, Undo2 } from "lucide-react";
 import clsx from "clsx";
 import { fetchAllBookingsWithDetail } from "@/lib/queries";
-import { effectiveStatus } from "@/lib/mutations";
+import { effectiveStatus, voidBooking } from "@/lib/mutations";
 import { formatCurrency, formatDate, formatTime } from "@/lib/format";
+import { useAuthStore } from "@/lib/store/authStore";
 import type { BookingStatus, BookingWithDetail } from "@/lib/types";
 
 const STATUS_META: Record<BookingStatus, { label: string; className: string }> = {
@@ -25,16 +26,38 @@ const FILTERS: { key: BookingStatus | "all"; label: string }[] = [
 
 export default function ReservationsPage() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const [bookings, setBookings] = useState<BookingWithDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<BookingStatus | "all">("all");
   const [query, setQuery] = useState("");
+
+  const [voidTargetId, setVoidTargetId] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidBusy, setVoidBusy] = useState(false);
+  const [voidMessage, setVoidMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAllBookingsWithDetail()
       .then(setBookings)
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleVoid(bookingId: string) {
+    setVoidBusy(true);
+    setVoidMessage(null);
+    const result = await voidBooking(bookingId, voidReason.trim() || undefined);
+    setVoidBusy(false);
+    if (!result.ok) {
+      setVoidMessage(result.message ?? "ยกเลิก/คืนเงินไม่สำเร็จ");
+      return;
+    }
+    setBookings((prev) =>
+      prev.map((b) => (b.booking_id === bookingId ? { ...b, status: "cancelled" } : b)),
+    );
+    setVoidTargetId(null);
+    setVoidReason("");
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -138,6 +161,50 @@ export default function ReservationsPage() {
                   >
                     <Plus className="h-3.5 w-3.5" /> เพิ่มเครื่องดื่ม/ของทานเล่น
                   </button>
+                )}
+
+                {status === "confirmed" && user?.role === "admin" && (
+                  voidTargetId === b.booking_id ? (
+                    <div className="mt-1 space-y-1.5 rounded-lg border border-accent/40 bg-accent-muted p-2">
+                      <input
+                        value={voidReason}
+                        onChange={(e) => setVoidReason(e.target.value)}
+                        placeholder="เหตุผล (ไม่บังคับ)"
+                        className="w-full rounded-md border border-border bg-bg px-2 py-1 text-xs outline-none placeholder:text-text-faint focus:border-accent"
+                      />
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => {
+                            setVoidTargetId(null);
+                            setVoidReason("");
+                          }}
+                          className="flex-1 rounded-md border border-border-strong py-1 text-xs text-text-muted"
+                        >
+                          ไม่ยกเลิก
+                        </button>
+                        <button
+                          onClick={() => handleVoid(b.booking_id)}
+                          disabled={voidBusy}
+                          className="flex-1 rounded-md bg-accent py-1 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          ยืนยันยกเลิก
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setVoidTargetId(b.booking_id);
+                        setVoidMessage(null);
+                      }}
+                      className="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-border-strong py-1.5 text-xs font-medium text-text-faint transition-colors hover:border-accent hover:text-accent"
+                    >
+                      <Undo2 className="h-3.5 w-3.5" /> ยกเลิก/คืนเงิน
+                    </button>
+                  )
+                )}
+                {voidMessage && voidTargetId === b.booking_id && (
+                  <p className="text-xs text-accent">{voidMessage}</p>
                 )}
               </div>
             );

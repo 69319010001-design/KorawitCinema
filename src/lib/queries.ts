@@ -1,6 +1,7 @@
 import { createClient } from "./supabase/client";
 import type {
   Addon,
+  AppUser,
   BookingAddon,
   BookingWithDetail,
   Cinema,
@@ -519,4 +520,20 @@ export async function fetchTodayOccupancy(): Promise<ShowtimeOccupancy[]> {
       capacity: hall ? (capacityByHall.get(hall.hall_id) ?? 0) : 0,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Admin: user directory. Only returns rows for an admin caller — RLS
+// ("admin read all users" in supabase_migration_cashier_core.sql) silently
+// filters everyone else down to just their own row.
+// ---------------------------------------------------------------------------
+
+export async function fetchAllUsers(): Promise<AppUser[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }

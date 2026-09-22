@@ -10,6 +10,7 @@ import {
   Popcorn,
   Receipt,
   Ticket,
+  Users,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuthStore } from "@/lib/store/authStore";
@@ -21,6 +22,8 @@ const NAV_LINKS = [
   { href: "/pos/reservations", label: "Reservations", icon: Receipt },
   { href: "/pos/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
+
+const ADMIN_NAV_LINK = { href: "/pos/staff", label: "Staff", icon: Users };
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
@@ -56,7 +59,7 @@ export default function PosShell({ children }: { children: React.ReactNode }) {
         </Link>
 
         <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-          {NAV_LINKS.map((item) => {
+          {[...NAV_LINKS, ...(user?.role === "admin" ? [ADMIN_NAV_LINK] : [])].map((item) => {
             const active = pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
