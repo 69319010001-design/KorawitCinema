@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Clapperboard,
-  Clock,
   Gift,
+  LayoutDashboard,
   LogOut,
   Popcorn,
   Receipt,
@@ -19,7 +19,7 @@ const NAV_LINKS = [
   { href: "/pos/concession", label: "Concession", icon: Popcorn },
   { href: "/pos/gift-cards", label: "Gift Card", icon: Gift },
   { href: "/pos/reservations", label: "Reservations", icon: Receipt },
-  { href: "/pos/shift", label: "Shift Mgmt", icon: Clock },
+  { href: "/pos/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 
 const ROLE_LABEL: Record<string, string> = {

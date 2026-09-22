@@ -182,16 +182,6 @@ export interface GiftCardTransaction {
   created_at: string;
 }
 
-export interface StaffShift {
-  shift_id: string;
-  staff_id: string;
-  clock_in: string;
-  clock_out: string | null;
-  starting_cash: number | null;
-  ending_cash: number | null;
-  notes: string | null;
-}
-
 export interface BookingWithDetail extends Booking {
   movie_title: string;
   cinema_name: string;

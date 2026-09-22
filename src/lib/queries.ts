@@ -13,7 +13,6 @@ import type {
   Seat,
   SeatType,
   Showtime,
-  StaffShift,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -367,30 +366,6 @@ export async function fetchGiftCardTransactions(
   return data ?? [];
 }
 
-export async function fetchOpenShift(staffId: string): Promise<StaffShift | null> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("staff_shifts")
-    .select("*")
-    .eq("staff_id", staffId)
-    .is("clock_out", null)
-    .order("clock_in", { ascending: false })
-    .maybeSingle();
-  if (error) throw error;
-  return data ?? null;
-}
-
-export async function fetchShiftsForStaff(staffId: string): Promise<StaffShift[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("staff_shifts")
-    .select("*")
-    .eq("staff_id", staffId)
-    .order("clock_in", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
-}
-
 export interface BookingAddonWithDetail extends BookingAddon {
   addon_name: string;
 }
@@ -413,16 +388,135 @@ export async function fetchBookingAddons(
   }));
 }
 
-export async function fetchPaymentsTotalForStaffToday(staffId: string): Promise<number> {
+// ---------------------------------------------------------------------------
+// Dashboard: aggregate stats computed client-side from raw rows — matches the
+// rest of this file's pattern (no RPCs/views needed, safe reads under the
+// existing public-read + "staff read all" policies).
+// ---------------------------------------------------------------------------
+
+export interface DashboardAddonLine {
+  name: string;
+  quantity: number;
+  price_each: number;
+}
+
+export interface DashboardBookingRow {
+  booking_id: string;
+  total_amount: number;
+  created_at: string;
+  movie_title: string;
+  seats_booked: number;
+  addons: DashboardAddonLine[];
+}
+
+/** Every confirmed sale (ticket and/or concession) since `since` — the base
+ * dataset the dashboard's revenue/top-movie/top-addon/peak-hour cards derive from. */
+export async function fetchConfirmedBookingsSince(
+  since: Date,
+): Promise<DashboardBookingRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "booking_id, total_amount, created_at, showtimes(movies(title_local)), booking_seats(status), booking_addons(quantity, price_each, addons(name))",
+    )
+    .eq("status", "confirmed")
+    .gte("created_at", since.toISOString());
+  if (error) throw error;
+
+  return (data ?? []).map((row) => {
+    const showtime = row.showtimes as unknown as {
+      movies: { title_local: string } | null;
+    } | null;
+    const seats = (row.booking_seats ?? []) as unknown as { status: string }[];
+    const addonRows = (row.booking_addons ?? []) as unknown as {
+      quantity: number;
+      price_each: number;
+      addons: { name: string } | null;
+    }[];
+    return {
+      booking_id: row.booking_id,
+      total_amount: row.total_amount,
+      created_at: row.created_at,
+      movie_title: showtime?.movies?.title_local ?? "",
+      seats_booked: seats.filter((s) => s.status === "booked").length,
+      addons: addonRows.map((a) => ({
+        name: a.addons?.name ?? "",
+        quantity: a.quantity,
+        price_each: a.price_each,
+      })),
+    };
+  });
+}
+
+export interface ShowtimeOccupancy {
+  showtime_id: string;
+  movie_title: string;
+  hall_name: string;
+  start_time: string;
+  booked: number;
+  capacity: number;
+}
+
+/** How full each of today's showtimes is (booked seats / active seats in that hall). */
+export async function fetchTodayOccupancy(): Promise<ShowtimeOccupancy[]> {
   const supabase = createClient();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("total_amount, user_id, status, created_at")
-    .eq("user_id", staffId)
-    .eq("status", "confirmed")
-    .gte("created_at", startOfDay.toISOString());
-  if (error) throw error;
-  return (data ?? []).reduce((sum, b) => sum + b.total_amount, 0);
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setDate(endOfDay.getDate() + 1);
+
+  const { data: showtimeRows, error: showtimeErr } = await supabase
+    .from("showtimes")
+    .select("showtime_id, start_time, movies(title_local), halls(hall_id, name)")
+    .gte("start_time", startOfDay.toISOString())
+    .lt("start_time", endOfDay.toISOString())
+    .order("start_time", { ascending: true });
+  if (showtimeErr) throw showtimeErr;
+  const showtimes = showtimeRows ?? [];
+  if (showtimes.length === 0) return [];
+
+  const hallIds = Array.from(
+    new Set(
+      showtimes.map(
+        (r) => (r.halls as unknown as { hall_id: string } | null)?.hall_id,
+      ),
+    ),
+  ).filter((id): id is string => Boolean(id));
+
+  const { data: seatRows, error: seatErr } = await supabase
+    .from("seats")
+    .select("hall_id")
+    .eq("is_active", true)
+    .in("hall_id", hallIds);
+  if (seatErr) throw seatErr;
+  const capacityByHall = new Map<string, number>();
+  for (const s of seatRows ?? []) {
+    capacityByHall.set(s.hall_id, (capacityByHall.get(s.hall_id) ?? 0) + 1);
+  }
+
+  const showtimeIds = showtimes.map((r) => r.showtime_id);
+  const { data: bookedRows, error: bookedErr } = await supabase
+    .from("booking_seats")
+    .select("showtime_id")
+    .eq("status", "booked")
+    .in("showtime_id", showtimeIds);
+  if (bookedErr) throw bookedErr;
+  const bookedByShowtime = new Map<string, number>();
+  for (const b of bookedRows ?? []) {
+    bookedByShowtime.set(b.showtime_id, (bookedByShowtime.get(b.showtime_id) ?? 0) + 1);
+  }
+
+  return showtimes.map((row) => {
+    const hall = row.halls as unknown as { hall_id: string; name: string } | null;
+    const movie = row.movies as unknown as { title_local: string } | null;
+    return {
+      showtime_id: row.showtime_id,
+      movie_title: movie?.title_local ?? "",
+      hall_name: hall?.name ?? "",
+      start_time: row.start_time,
+      booked: bookedByShowtime.get(row.showtime_id) ?? 0,
+      capacity: hall ? (capacityByHall.get(hall.hall_id) ?? 0) : 0,
+    };
+  });
 }

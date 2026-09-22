@@ -1,5 +1,5 @@
 import { createClient } from "./supabase/client";
-import type { Booking, BookingSeat, GiftCard, Payment, StaffShift } from "./types";
+import type { Booking, BookingSeat, GiftCard, Payment } from "./types";
 
 // ---------------------------------------------------------------------------
 // Writes to bookings/booking_seats/payments all go through the Postgres RPC
@@ -231,32 +231,4 @@ export async function redeemGiftCard(input: {
   });
 
   return { ok: true, balance: newBalance };
-}
-
-export async function clockIn(
-  staffId: string,
-  startingCash: number,
-): Promise<{ ok: boolean; message?: string; shift?: StaffShift }> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("staff_shifts")
-    .insert({ staff_id: staffId, starting_cash: startingCash })
-    .select("*")
-    .single();
-  if (error) return { ok: false, message: error.message };
-  return { ok: true, shift: data as StaffShift };
-}
-
-export async function clockOut(
-  shiftId: string,
-  endingCash: number,
-  notes?: string,
-): Promise<{ ok: boolean; message?: string }> {
-  const supabase = createClient();
-  const { error } = await supabase
-    .from("staff_shifts")
-    .update({ clock_out: new Date().toISOString(), ending_cash: endingCash, notes })
-    .eq("shift_id", shiftId);
-  if (error) return { ok: false, message: error.message };
-  return { ok: true };
 }
